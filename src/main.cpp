@@ -16,7 +16,8 @@ long unsigned int lastTransmitTime = millis();
 const int transmitDelay = 1000;
 
 // REPLACE WITH THE MAC Address of your receiver
-uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+// uint8_t broadcastAddress[] = {0xC8, 0xC9, 0xA3, 0x72, 0xBE, 0x13};
+uint8_t broadcastAddress[] = {0xC8, 0xC9, 0xA3, 0x73, 0x2A, 0x01};
 
 // Variable to store if sending data was successful
 String success;
@@ -44,11 +45,12 @@ void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus)
   if (sendStatus == 0)
   {
     Serial.println("Delivery success");
-    untransmittedSettings = false;
   }
   else
   {
     Serial.println("Delivery fail");
+    lastTransmitTime = millis();
+    untransmittedSettings = true;
   }
 }
 
@@ -79,6 +81,15 @@ uint32_t Wheel(byte WheelPos)
   return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
 }
 
+uint32_t scaledColor(uint32_t color, byte scale)
+{
+  uint8_t r = map(scale, 0, 255, 0, (uint8_t) (color >> 16));
+  uint8_t g = map(scale, 0, 255, 0, (uint8_t) (color >> 8));
+  uint8_t b = map(scale, 0, 255, 0, (uint8_t) color);
+
+  return ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+}
+
 uint32_t currentColor()
 {
   switch (color)
@@ -102,7 +113,7 @@ uint32_t currentColor()
     return strip.Color(255, 0, 255);
     break;
   case 6:
-    return Wheel(millis() % 255);
+    return Wheel(int(millis() / 10) % 255);
     break;
 
   default:
@@ -153,6 +164,22 @@ void flash(int wait)
 
 void strobe(uint8_t wait)
 {
+  if (millis() % (2 * wait) > wait && millis() % (6 * wait) > wait)
+  {
+    for (uint16_t i = 0; i < strip.numPixels(); i++)
+    {
+      strip.setPixelColor(i, currentColor());
+    }
+    strip.show();
+  }
+  else
+  {
+    for (uint16_t i = 0; i < strip.numPixels(); i++)
+    {
+      strip.setPixelColor(i, strip.Color(0, 0, 0));
+    }
+    strip.show();
+  }
 }
 
 void heartbeat(uint8_t wait)
@@ -201,8 +228,8 @@ IRAM_ATTR void changeMode()
   {
     animation = (animation + 1) % 7;
     lastActionTime = millis();
-    lastTransmitTime = millis();
     untransmittedSettings = true;
+    lastTransmitTime = millis() - transmitDelay;
   }
 }
 
@@ -212,8 +239,8 @@ IRAM_ATTR void changeColor()
   {
     color = (color + 1) % 7;
     lastActionTime = millis();
-    lastTransmitTime = millis();
     untransmittedSettings = true;
+    lastTransmitTime = millis() - transmitDelay;
   }
 }
 
@@ -226,7 +253,7 @@ void transmitSettings()
 
     // Send message via ESP-NOW
     esp_now_send(broadcastAddress, (uint8_t *)&ownSettings, sizeof(ownSettings));
-    lastTransmitTime = millis();
+    untransmittedSettings = false;
   }
 }
 
