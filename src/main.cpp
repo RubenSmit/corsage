@@ -83,9 +83,9 @@ uint32_t Wheel(byte WheelPos)
 
 uint32_t scaledColor(uint32_t color, byte scale)
 {
-  uint8_t r = map(scale, 0, 255, 0, (uint8_t) (color >> 16));
-  uint8_t g = map(scale, 0, 255, 0, (uint8_t) (color >> 8));
-  uint8_t b = map(scale, 0, 255, 0, (uint8_t) color);
+  uint8_t r = map(scale, 0, 255, 0, (uint8_t)(color >> 16));
+  uint8_t g = map(scale, 0, 255, 0, (uint8_t)(color >> 8));
+  uint8_t b = map(scale, 0, 255, 0, (uint8_t)color);
 
   return ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
 }
@@ -113,7 +113,7 @@ uint32_t currentColor()
     return strip.Color(255, 0, 255);
     break;
   case 6:
-    return Wheel(int(millis() / 10) % 255);
+    return Wheel(int(millis() / 50) % 255);
     break;
 
   default:
@@ -162,9 +162,12 @@ void flash(int wait)
   }
 }
 
-void strobe(uint8_t wait)
+void strobe(int wait)
 {
-  if (millis() % (2 * wait) > wait && millis() % (6 * wait) > wait)
+  int t = millis() % wait;
+  const int step = wait / 12;
+
+  if (t < step || (t > step * 2 && t < step * 3) || (t > step * 4 && t < step * 5))
   {
     for (uint16_t i = 0; i < strip.numPixels(); i++)
     {
@@ -182,12 +185,46 @@ void strobe(uint8_t wait)
   }
 }
 
-void heartbeat(uint8_t wait)
+void heartbeat(int wait)
 {
+  int t = millis() % wait;
+  const int step = wait / 8;
+  const int minimum = 50;
+  int scale = minimum;
+
+  if (t < step)
+  {
+    scale = map(t, 0, step, minimum, 255);
+  }
+  if (t >= step && t < (step * 2))
+  {
+    scale = map(t, step, step * 2, 255, minimum);
+  }
+  if (t >= (step * 2) && t < (step * 3))
+  {
+    scale = map(t, step * 2, step * 3, minimum, 255);
+  }
+  if (t >= (step * 3) && t < (step * 4))
+  {
+    scale = map(t, step * 3, step * 4, 255, minimum);
+  }
+
+  for (uint16_t i = 0; i < strip.numPixels(); i++)
+  {
+    strip.setPixelColor(i, scaledColor(currentColor(), scale));
+  }
+  strip.show();
 }
 
-void spinner(uint8_t wait)
+void spinner(int wait)
 {
+  int t = millis() % wait;
+  for (uint16_t i = 0; i < strip.numPixels(); i++)
+  {
+    uint8_t pos = map((t + (wait / strip.numPixels() * i)) % wait, 0, wait, 255, 0);
+    strip.setPixelColor(strip.numPixels() - 1 - i, scaledColor(currentColor(), pos));
+  }
+  strip.show();
 }
 
 void runCurrentAnimation()
@@ -207,13 +244,13 @@ void runCurrentAnimation()
     flash(200);
     break;
   case 4:
-    strobe(200);
+    strobe(500);
     break;
   case 5:
-    heartbeat(20);
+    heartbeat(3000);
     break;
   case 6:
-    spinner(20);
+    spinner(3000);
     break;
 
   default:
@@ -266,7 +303,7 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(COLOR_PIN), changeColor, FALLING);
 
   strip.begin();
-  strip.setBrightness(50);
+  strip.setBrightness(20);
   strip.show();
 
   // Set device as a Wi-Fi Station
@@ -298,4 +335,5 @@ void loop()
 {
   runCurrentAnimation();
   transmitSettings();
+  delay(20);
 }
