@@ -2,15 +2,18 @@
 #include <ESP8266WiFi.h>
 #include <espnow.h>
 
+// Define the pins
 #define STRIP_PIN 14
 #define MODE_PIN 13
 #define COLOR_PIN 12
 
+// Variables for the settings
 int color = 0;
 int animation = 0;
 long unsigned int lastActionTime = millis();
-const int actionDelay = 500;
+const int actionDelay = 300;
 
+// Variables for transmitting
 boolean untransmittedSettings = false;
 long unsigned int lastTransmitTime = millis();
 const int transmitDelay = 1000;
@@ -22,7 +25,7 @@ uint8_t broadcastAddress[] = {0xC8, 0xC9, 0xA3, 0x73, 0x2A, 0x01};
 // Variable to store if sending data was successful
 String success;
 
-// Structure example to send data
+// Structure to send data
 // Must match the receiver structure
 typedef struct struct_message
 {
@@ -30,7 +33,7 @@ typedef struct struct_message
   int animation;
 } struct_message;
 
-// Create a struct_message called transmitSettings to hold own settings
+// Create a struct_message to hold own settings
 struct_message ownSettings;
 
 // Create a struct_message to hold incoming settings
@@ -48,6 +51,7 @@ void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus)
   }
   else
   {
+    // If the transmission fails we retry after the transmit delay has passed
     Serial.println("Delivery fail");
     lastTransmitTime = millis();
     untransmittedSettings = true;
@@ -65,6 +69,7 @@ void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len)
   untransmittedSettings = false;
 }
 
+// Returns a color based on a position on the hue wheel
 uint32_t Wheel(byte WheelPos)
 {
   WheelPos = 255 - WheelPos;
@@ -81,6 +86,7 @@ uint32_t Wheel(byte WheelPos)
   return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
 }
 
+// Scale a color to a brightness between 0 and 255
 uint32_t scaledColor(uint32_t color, byte scale)
 {
   uint8_t r = map(scale, 0, 255, 0, (uint8_t)(color >> 16));
@@ -90,6 +96,7 @@ uint32_t scaledColor(uint32_t color, byte scale)
   return ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
 }
 
+// Returns the current color
 uint32_t currentColor()
 {
   switch (color)
@@ -133,6 +140,7 @@ void rainbowCycle(uint8_t wait)
   strip.show();
 }
 
+// Display a solid color
 void solid()
 {
   for (uint16_t i = 0; i < strip.numPixels(); i++)
@@ -142,6 +150,7 @@ void solid()
   strip.show();
 }
 
+// Display a flash with the given period
 void flash(int wait)
 {
   if (millis() % (2 * wait) > wait)
@@ -162,6 +171,7 @@ void flash(int wait)
   }
 }
 
+// Display a strobe with the given period
 void strobe(int wait)
 {
   int t = millis() % wait;
@@ -185,6 +195,7 @@ void strobe(int wait)
   }
 }
 
+// Display a heartbeat animation with the given period
 void heartbeat(int wait)
 {
   int t = millis() % wait;
@@ -216,6 +227,8 @@ void heartbeat(int wait)
   strip.show();
 }
 
+
+// Display a spinner with the given period
 void spinner(int wait)
 {
   int t = millis() % wait;
@@ -227,6 +240,7 @@ void spinner(int wait)
   strip.show();
 }
 
+// Runs the current animation
 void runCurrentAnimation()
 {
   switch (animation)
@@ -259,6 +273,7 @@ void runCurrentAnimation()
   }
 }
 
+// Interrupt function for changing the mode
 IRAM_ATTR void changeMode()
 {
   if (millis() > lastActionTime + actionDelay)
@@ -270,6 +285,7 @@ IRAM_ATTR void changeMode()
   }
 }
 
+// Interrupt function for changing the color
 IRAM_ATTR void changeColor()
 {
   if (millis() > lastActionTime + actionDelay)
@@ -281,6 +297,7 @@ IRAM_ATTR void changeColor()
   }
 }
 
+// Transmits the settings via ESP-NOW
 void transmitSettings()
 {
   if (untransmittedSettings && millis() > lastTransmitTime + transmitDelay)
@@ -299,11 +316,13 @@ void setup()
   pinMode(MODE_PIN, INPUT_PULLUP);
   pinMode(COLOR_PIN, INPUT_PULLUP);
 
+  // Attach the mode and color interrupts
   attachInterrupt(digitalPinToInterrupt(MODE_PIN), changeMode, FALLING);
   attachInterrupt(digitalPinToInterrupt(COLOR_PIN), changeColor, FALLING);
 
+  // Start the ledstrip
   strip.begin();
-  strip.setBrightness(20);
+  strip.setBrightness(100); // The bms requires a minimum of 50mA or it shuts down, this is the lowest we can go
   strip.show();
 
   // Set device as a Wi-Fi Station
@@ -331,6 +350,7 @@ void setup()
   esp_now_register_recv_cb(OnDataRecv);
 }
 
+// Run the animations at 50fps and transmit any changes in settings
 void loop()
 {
   runCurrentAnimation();
